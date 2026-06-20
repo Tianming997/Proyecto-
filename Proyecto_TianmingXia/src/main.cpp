@@ -3,65 +3,51 @@
 #include <U8g2lib.h>
 #include "Adafruit_BME680.h"
 
-// 1. Pantalla OLED en pines estándar (21 y 22)
+// 1. Configurar la pantalla en los pines estándar (21 y 22)
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
-// 2. Sensor BME680 en bus secundario
-Adafruit_BME680 bme;
-TwoWire I2C_Sensor = TwoWire(1); // Canal 1 para pines 33 y 32
+// 2. Configurar el sensor BME680
+Adafruit_BME680 bme; 
 
 void setup() {
   Serial.begin(115200);
 
-  // Despertar al sensor forzando el modo I2C
-  pinMode(25, OUTPUT);
-  digitalWrite(25, HIGH); 
-  delay(500);
-
-  // Iniciar pantalla y bus del sensor
+  // Arrancar la pantalla y el bus de datos
   u8g2.begin();
-  I2C_Sensor.begin(33, 32); 
+  Wire.begin(); 
 
-  Serial.println("Buscando el sensor BME680...");
-  bool conectado = false;
+  Serial.println("Iniciando Sistema Oficial...");
   
-  // BUCLE DE BÚSQUEDA INFINITO
-  while (!conectado) {
-    if (bme.begin(0x77, &I2C_Sensor)) {
-      Serial.println("¡BINGO! Conectado en 0x77.");
-      conectado = true;
-    } else if (bme.begin(0x76, &I2C_Sensor)) {
-      Serial.println("¡BINGO! Conectado en 0x76.");
-      conectado = true;
-    } else {
-      Serial.println("Sensor suelto. Aprieta pines 33, 32 y 25...");
-      
-      // Aviso visual en la pantalla
-      u8g2.clearBuffer();
-      u8g2.setFont(u8g2_font_6x10_tf);
-      u8g2.drawStr(0, 30, "APRIETA CABLES!");
-      u8g2.sendBuffer();
-      
-      delay(1000); 
-    }
+  // BUCLE DE SEGURIDAD: Busca el sensor en 0x77
+  while (!bme.begin(0x77)) {
+    Serial.println("BME680 no responde en 0x77. Comprobando...");
+    
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_6x10_tf);
+    u8g2.drawStr(0, 30, "BUSCANDO SENSOR...");
+    u8g2.sendBuffer();
+    delay(1000);
   }
   
-  // Si sale del bucle, configuramos la precisión
+  Serial.println("¡TODO CONECTADO! Arrancando motores...");
+
+  // Ajustes de precisión para el BME680
   bme.setTemperatureOversampling(BME680_OS_8X);
   bme.setHumidityOversampling(BME680_OS_2X);
-  bme.setGasHeater(320, 150); 
+  bme.setGasHeater(320, 150); // 320°C durante 150ms para medir el gas
 }
 
 void loop() {
-  // Intentar leer el sensor
+  // Leer los datos del sensor físico
   if (!bme.performReading()) {
-    Serial.println("Microcorte detectado... intentando recuperar.");
-    return; // Salta esta vuelta y lo vuelve a intentar
+    Serial.println("Error de lectura en esta vuelta.");
+    return;
   }
 
-  // --- DIBUJAR EN PANTALLA ---
+  // --- ENVIAR DATOS A LA PANTALLA OLED ---
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_7x14_tr);
+  
   u8g2.drawStr(0, 12, "MONITOR DE AIRE");
   u8g2.drawHLine(0, 15, 128);
   
@@ -76,9 +62,10 @@ void loop() {
   
   u8g2.sendBuffer();
 
-  // --- IMPRIMIR EN MONITOR SERIAL ---
-  Serial.print("Temperatura real: "); Serial.print(bme.temperature);
-  Serial.print(" C | Gas: "); Serial.println(bme.gas_resistance);
+  // --- ENVIAR DATOS AL MONITOR SERIAL (PC) ---
+  Serial.print("Temperatura: "); Serial.print(bme.temperature);
+  Serial.print(" C | Humedad: "); Serial.print(bme.humidity);
+  Serial.print(" % | Gas: "); Serial.println(bme.gas_resistance / 1000.0);
 
-  delay(2000); // Refresca cada 2 segundos
+  delay(2000); // Mediciones cada 2 segundos
 }
